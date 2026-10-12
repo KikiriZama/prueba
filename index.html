@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Analizador de Imágenes</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#1d2433;--muted:#5b6475;--accent:#0f6cbd;--ok:#107c10;--line:#e3e7ef}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text)}
+header{background:var(--accent);color:#fff;padding:18px 24px}
+header h1{margin:0;font-size:22px}
+header p{margin:4px 0 0;opacity:.9;font-size:14px}
+main{max-width:1100px;margin:20px auto;padding:0 16px;display:grid;grid-template-columns:340px 1fr;gap:20px}
+@media(max-width:800px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
+input[type=text],input[type=password]{width:100%;padding:9px;border:1px solid #c8cfdb;border-radius:6px;font-size:14px}
+.drop{margin-top:14px;border:2px dashed #b9c3d6;border-radius:8px;padding:18px;text-align:center;cursor:pointer;color:var(--muted)}
+.drop:hover{border-color:var(--accent)}
+button{margin-top:16px;width:100%;padding:12px;border:0;border-radius:6px;background:var(--accent);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+button:disabled{background:#9bb6d3;cursor:not-allowed}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+canvas{max-width:100%;border-radius:8px;display:block;margin:0 auto}
+.empty{color:var(--muted);text-align:center;padding:60px 0}
+.caption{font-size:20px;font-weight:600;margin:4px 0 8px}
+.bar{height:10px;background:#e6ebf3;border-radius:5px;overflow:hidden}
+.bar>div{height:100%;background:var(--ok);width:0}
+.sec{margin-top:18px}
+.sec h2{font-size:13px;margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+ul{list-style:none;padding:0;margin:0}
+li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:14px}
+.pct{font-weight:600;white-space:nowrap}
+.alta{color:var(--ok)}.media{color:#b26a00}.baja{color:#c50f1f}
+.err{background:#fde7e9;color:#a4262c;padding:10px;border-radius:6px;margin-top:12px;font-size:14px;display:none}
+.legend{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Analizador de Imágenes</h1>
+  <p>Azure AI Vision · describe la imagen y lee el texto que contiene</p>
+</header>
+<main>
+  <section class="card">
+    <label for="ep">Punto de conexión (Extremo)</label>
+    <input id="ep" type="text" value="https://vision-zamacona.cognitiveservices.azure.com/">
+    <label for="key">Clave</label>
+    <input id="key" type="password" value="9TZc335hV8G4J8FhiALQqlWqLdmKM1X9hcLIRlof0m17LSP4ct9gJQQJ99CJACYeBjFXJ3w3AAAFACOGUM1b">
+    <div class="drop" id="drop">📷 Haz clic para elegir una imagen<br><small>JPG o PNG, menos de 4 MB</small></div>
+    <input id="file" type="file" accept="image/*" hidden>
+    <button id="go" disabled>Analizar imagen</button>
+    <div class="err" id="err"></div>
+    <p class="hint">La clave solo se usa en tu computadora para comunicarse con Azure; no se guarda.</p>
+  </section>
+
+  <section class="card">
+    <div id="empty" class="empty">Aquí aparecerá tu imagen y el resultado.</div>
+    <canvas id="cv" hidden></canvas>
+    <div id="res" hidden>
+      <p class="legend">Los recuadros azules marcan dónde encontró texto.</p>
+      <div class="sec">
+        <h2>¿Qué hay en la imagen?</h2>
+        <div class="caption" id="cap"></div>
+        <div class="bar"><div id="capbar"></div></div>
+        <div class="hint" id="cappct"></div>
+      </div>
+      <div class="sec">
+        <h2>Texto encontrado</h2>
+        <ul id="lines"></ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let img = null;
+let blob = null;
+let descripcion = '';
+
+const traducir = document.createElement('button');
+traducir.type = 'button';
+traducir.textContent = 'Traducir descripción al español';
+traducir.hidden = true;
+$('cap').insertAdjacentElement('afterend', traducir);
+
+traducir.onclick = () => {
+  const url = 'https://translate.google.com/?sl=en&tl=es&text='
+    + encodeURIComponent(descripcion)
+    + '&op=translate';
+
+  window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+$('drop').onclick = () => $('file').click();
+
+$('file').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+
+  $('err').style.display = 'none';
+
+  if (!['image/jpeg', 'image/png'].includes(f.type)) {
+    showErr('Selecciona una imagen JPG o PNG.');
+    return;
+  }
+
+  if (f.size >= 4 * 1024 * 1024) {
+    showErr('La imagen debe pesar menos de 4 MB.');
+    return;
+  }
+
+  $('go').disabled = true;
+  $('res').hidden = true;
+  traducir.hidden = true;
+  descripcion = '';
+
+  const nuevaImagen = new Image();
+  const url = URL.createObjectURL(f);
+
+  nuevaImagen.onload = () => {
+    URL.revokeObjectURL(url);
+    img = nuevaImagen;
+    blob = f;
+    draw([]);
+    $('go').disabled = false;
+    $('drop').textContent = '✅ ' + f.name + ' — Clic para cambiar';
+  };
+
+  nuevaImagen.onerror = () => {
+    URL.revokeObjectURL(url);
+    showErr('No se pudo abrir la imagen.');
+    $('go').disabled = !blob;
+  };
+
+  nuevaImagen.src = url;
+};
+
+function draw(lines) {
+  if (!img) return;
+
+  const c = $('cv');
+  const x = c.getContext('2d');
+
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  x.drawImage(img, 0, 0);
+
+  x.lineWidth = Math.max(2, img.naturalWidth / 300);
+  x.strokeStyle = '#00d8ff';
+
+  lines.forEach(l => {
+    const p = l.boundingPolygon;
+    if (!p || p.length < 3) return;
+
+    x.beginPath();
+    x.moveTo(p[0].x, p[0].y);
+    p.slice(1).forEach(q => x.lineTo(q.x, q.y));
+    x.closePath();
+    x.stroke();
+  });
+
+  c.hidden = false;
+  $('empty').hidden = true;
+}
+
+const nivel = c => c >= .8 ? 'alta' : c >= .5 ? 'media' : 'baja';
+
+function showErr(m) {
+  $('err').textContent = m;
+  $('err').style.display = 'block';
+}
+
+$('go').onclick = async () => {
+  const ep = $('ep').value.trim().replace(/\/+$/, '');
+  const key = $('key').value.trim();
+
+  $('err').style.display = 'none';
+
+  if (!key) {
+    showErr('Falta la clave.');
+    return;
+  }
+
+  if (!blob) {
+    showErr('Selecciona una imagen.');
+    return;
+  }
+
+  $('go').disabled = true;
+  $('file').disabled = true;
+  $('go').textContent = 'Analizando...';
+  $('res').hidden = true;
+  traducir.hidden = true;
+
+  try {
+    const r = await fetch(
+      ep + '/computervision/imageanalysis:analyze?api-version=2024-02-01&features=caption,read',
+      {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': key,
+          'Content-Type': 'application/octet-stream'
+        },
+        body: blob
+      }
+    );
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      throw new Error(d.error?.message || 'Error ' + r.status);
+    }
+
+    const cap = d.captionResult;
+
+    if (cap && typeof cap.text === 'string') {
+      descripcion = cap.text;
+      $('cap').textContent = descripcion;
+      traducir.hidden = false;
+
+      const confianza = cap.confidence;
+
+      if (Number.isFinite(confianza)) {
+        const pct = Math.round(confianza * 100);
+        $('capbar').style.width = Math.max(0, Math.min(100, pct)) + '%';
+        $('cappct').textContent =
+          'Confianza del análisis: ' + pct + '% · Descripción original en inglés';
+      } else {
+        $('capbar').style.width = '0%';
+        $('cappct').textContent = 'Descripción original en inglés';
+      }
+    } else {
+      descripcion = '';
+      $('cap').textContent = 'No se recibió una descripción.';
+      $('capbar').style.width = '0%';
+      $('cappct').textContent = '';
+    }
+
+    const lines = (d.readResult?.blocks || [])
+      .flatMap(b => b.lines || []);
+
+    const ul = $('lines');
+    ul.replaceChildren();
+
+    if (!lines.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No se encontró texto en la imagen.';
+      ul.append(li);
+    }
+
+    lines.forEach(l => {
+      const li = document.createElement('li');
+      const texto = document.createElement('span');
+      texto.textContent = l.text;
+
+      const confidencias = (l.words || [])
+        .map(w => w.confidence)
+        .filter(Number.isFinite);
+
+      li.append(texto);
+
+      if (confidencias.length) {
+        const promedio = confidencias.reduce((s, c) => s + c, 0)
+          / confidencias.length;
+
+        const porcentaje = document.createElement('span');
+        porcentaje.className = 'pct ' + nivel(promedio);
+        porcentaje.textContent = Math.round(promedio * 100) + '%';
+        li.append(porcentaje);
+      }
+
+      ul.append(li);
+    });
+
+    draw(lines);
+    $('res').hidden = false;
+
+  } catch (e) {
+    showErr(
+      'No se pudo analizar: ' + e.message +
+      '. Revisa la conexión, la clave y el punto de conexión.'
+    );
+  } finally {
+    $('go').disabled = !blob;
+    $('file').disabled = false;
+    $('go').textContent = 'Analizar imagen';
+  }
+};
+</script>
+</body>
+</html>
