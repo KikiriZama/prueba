@@ -8,11 +8,16 @@
 :root{--bg:#f5f7fb;--card:#fff;--text:#1d2433;--muted:#5b6475;--accent:#0f6cbd;--ok:#107c10;--line:#e3e7ef}
 *{box-sizing:border-box}
 body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--text)}
-header{background:var(--accent);color:#fff;padding:18px 24px}
+header{background:var(--accent);color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center}
 header h1{margin:0;font-size:22px}
 header p{margin:4px 0 0;opacity:.9;font-size:14px}
+.btn-next{background:#ffffff;color:var(--accent);padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;transition:background .2s,color .2s;display:inline-flex;align-items:center;gap:6px;border:none}
+.btn-next:hover{background:#e6f0fa}
 main{max-width:1100px;margin:20px auto;padding:0 16px;display:grid;grid-template-columns:340px 1fr;gap:20px}
-@media(max-width:800px){main{grid-template-columns:1fr}}
+@media(max-width:800px){
+  header{flex-direction:column;align-items:flex-start;gap:12px}
+  main{grid-template-columns:1fr}
+}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px}
 label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
 input[type=text],input[type=password]{width:100%;padding:9px;border:1px solid #c8cfdb;border-radius:6px;font-size:14px}
@@ -38,8 +43,12 @@ li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bott
 </head>
 <body>
 <header>
-  <h1>Analizador de Imágenes</h1>
-  <p>Azure AI Vision · describe la imagen y lee el texto que contiene</p>
+  <div>
+    <h1>Analizador de Imágenes</h1>
+    <p>Azure AI Vision · describe la imagen y lee el texto que contiene</p>
+  </div>
+  <!-- Botón hacia la siguiente práctica -->
+  <a href="practica2.html" class="btn-next">Siguiente Práctica →</a>
 </header>
 <main>
   <section class="card">
