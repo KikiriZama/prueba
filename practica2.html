@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Práctica 2 - Inventario Azure MongoDB</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1d2433;
+      --muted: #5b6475;
+      --accent: #0f6cbd;
+      --line: #e3e7ef;
+      --ok: #107c10;
+      --err: #a4262c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: var(--accent);
+      color: #fff;
+      padding: 18px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 4px 0 0; opacity: 0.9; font-size: 14px; }
+    .btn-prev {
+      background: #ffffff;
+      color: var(--accent);
+      padding: 10px 18px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .btn-prev:hover { background: #e6f0fa; }
+    main {
+      max-width: 1100px;
+      margin: 20px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 800px) {
+      header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      main { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 18px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 12px 0 4px;
+    }
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 9px;
+      border: 1px solid #c8cfdb;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    button {
+      margin-top: 16px;
+      width: 100%;
+      padding: 12px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    th {
+      background: #f0f4f9;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .status-msg {
+      margin-top: 10px;
+      font-size: 13px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Práctica 2: Gestión de Inventario</h1>
+    <p>Conexión a Azure Cosmos DB (API de MongoDB)</p>
+  </div>
+  <!-- Botón para regresar a la Práctica 1 -->
+  <a href="index.html" class="btn-prev">← Práctica Anterior</a>
+</header>
+
+<main>
+  <!-- Formulario de Alta -->
+  <section class="card">
+    <h3>Registrar Producto</h3>
+    <form id="form-producto">
+      <label for="codigo">Código</label>
+      <input type="text" id="codigo" placeholder="Ej. PROD007" required>
+
+      <label for="nombre">Nombre</label>
+      <input type="text" id="nombre" placeholder="Nombre del producto" required>
+
+      <label for="categoria">Categoría</label>
+      <input type="text" id="categoria" placeholder="Ej. Periféricos" required>
+
+      <label for="precio">Precio ($)</label>
+      <input type="number" id="precio" step="0.01" placeholder="0.00" required>
+
+      <label for="stock">Stock</label>
+      <input type="number" id="stock" placeholder="Cantidad" required>
+
+      <button type="submit" id="btn-guardar">Guardar en MongoDB</button>
+      <div id="msg" class="status-msg"></div>
+    </form>
+  </section>
+
+  <!-- Tabla de Consultas -->
+  <section class="card">
+    <h3>Productos Registrados</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>Categoría</th>
+          <th>Precio</th>
+          <th>Stock</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body">
+        <tr>
+          <td colspan="5" style="text-align:center; color: var(--muted);">Cargando datos desde la nube...</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+  // Cambia esta URL por el dominio completo de tu App Service si es diferente
+  const API_URL = 'https://inventario-zamacona.azurewebsites.net/api/productos';
+
+  // Función para consultar productos (Read)
+  async function cargarProductos() {
+    try {
+      const res = await fetch(API_URL);
+      const productos = await res.json();
+      const tbody = document.getElementById('tabla-body');
+      tbody.innerHTML = '';
+
+      if (productos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No hay productos en la base de datos.</td></tr>';
+        return;
+      }
+
+      productos.forEach(p => {
+        tbody.innerHTML += `
+          <tr>
+            <td><b>${p.codigo}</b></td>
+            <td>${p.nombre}</td>
+            <td>${p.categoria}</td>
+            <td>$${p.precio}</td>
+            <td>${p.stock}</td>
+          </tr>
+        `;
+      });
+    } catch (err) {
+      document.getElementById('tabla-body').innerHTML = 
+        '<tr><td colspan="5" style="color:var(--err); text-align:center;">Error al conectar con la API de Azure.</td></tr>';
+    }
+  }
+
+  // Función para registrar un nuevo producto (Create)
+  document.getElementById('form-producto').onsubmit = async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('msg');
+    const btn = document.getElementById('btn-guardar');
+
+    const nuevoProducto = {
+      codigo: document.getElementById('codigo').value.trim(),
+      nombre: document.getElementById('nombre').value.trim(),
+      categoria: document.getElementById('categoria').value.trim(),
+      precio: parseFloat(document.getElementById('precio').value),
+      stock: parseInt(document.getElementById('stock').value)
+    };
+
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nuevoProducto)
+      });
+
+      if (res.ok) {
+        msg.style.color = 'var(--ok)';
+        msg.textContent = '✅ Producto guardado correctamente.';
+        msg.style.display = 'block';
+        document.getElementById('form-producto').reset();
+        cargarProductos();
+      } else {
+        throw new Error('Error al guardar');
+      }
+    } catch (err) {
+      msg.style.color = 'var(--err)';
+      msg.textContent = '❌ Error al guardar el producto.';
+      msg.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Guardar en MongoDB';
+    }
+  };
+
+  // Cargar datos al iniciar
+  cargarProductos();
+</script>
+
+</body>
+</html>
